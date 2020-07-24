@@ -59,9 +59,9 @@ class Bert(nn.Module):
         ])
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, x, segment_ids):
+    def forward(self, x, mask, segment_ids):
         batch_size, max_seq_length = x.shape
-        mask = (x > 0).unsqueeze(1).repeat(1, max_seq_length, 1).unsqueeze(1)
+        mask = mask.unsqueeze(1).repeat(1, max_seq_length, 1).unsqueeze(1)
 
         te = self.tok_embedding(x)
         pos = torch.arange(0, max_seq_length).unsqueeze(0).repeat(batch_size, 1)

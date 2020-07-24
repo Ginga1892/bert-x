@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
 from pretrain import BertPreTrain
+import tokenization
+from processor import BertData
+from model import BertConfig, Bert
 
 
-class BertTrain(object):
-    def __init__(self, bert_model, bert_data):
+class Trainer(object):
+    def __init__(self, bert_model):
         self.bert_model = bert_model
-        self.bert_data = bert_data
 
     def pre_train(self, iterator, do_train, num_train_epochs=3, learning_rate=1e-5):
         model = BertPreTrain(self.bert_model)
@@ -28,7 +30,7 @@ class BertTrain(object):
                     mlm_weights = batch['mlm_weights']
                     nsp_labels = batch['nsp_labels']
 
-                    prediction_scores, next_sentence_scores = model(input_ids, segment_ids, mlm_positions)
+                    prediction_scores, next_sentence_scores = model(input_ids, input_mask, segment_ids, mlm_positions)
 
                     mlm_mask = mlm_weights.unsqueeze(2).repeat(1, 1, self.bert_model.config.vocab_size)
                     mlm_loss = criterion(prediction_scores.masked_fill(mlm_mask == 0, 0).permute(0, 2, 1), mlm_ids)

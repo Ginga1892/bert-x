@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from model import Bert
 
 
 class BertPreTrain(nn.Module):
@@ -11,8 +10,8 @@ class BertPreTrain(nn.Module):
         self.mlm = MaskedLanguageModel(bert_model.config.vocab_size, bert_model.config.hidden_size)
         self.nsp = NextSentencePrediction(bert_model.config.hidden_size)
 
-    def forward(self, x, segment_ids, mlm_positions):
-        x = self.bert(x, segment_ids)
+    def forward(self, x, mask, segment_ids, mlm_positions):
+        x = self.bert(x, mask, segment_ids)
 
         prediction_scores = self.mlm(x, mlm_positions)
         next_sentence_scores = self.nsp(x)
