@@ -1,22 +1,11 @@
 import torch
 import random
-import tokenization
 
 
 class BertData(object):
-    def __init__(self, input_files, vocab_file, tokenizer):
-        self.vocab = {}
-        index = 0
-        with open(vocab_file, "r", encoding='utf-8') as reader:
-            while True:
-                token = reader.readline()
-                if not token:
-                    break
-                token = token.strip()
-                self.vocab[token] = index
-                index += 1
-        self.vocab_size = len(self.vocab)
-
+    def __init__(self, input_files, tokenizer):
+        self.tokenizer = tokenizer
+        self.vocab = tokenizer.vocab
         self.documents = [[]]
         for input_file in input_files:
             with open(input_file, "r", encoding='utf-8') as f:
@@ -32,11 +21,8 @@ class BertData(object):
         self.documents = [x for x in self.documents if x]
         random.shuffle(self.documents)
 
-        self.instances = None
-        self.iterator = None
-
     def create_instances(self, max_seq_length, dupe_factor,
-                         masked_lm_prob, max_predictions_per_seq):
+                         mlm_prob, max_predictions_per_seq):
         self.max_seq_length = max_seq_length
         self.max_predictions_per_seq = max_predictions_per_seq
 
@@ -45,10 +31,8 @@ class BertData(object):
         for _ in range(dupe_factor):
             for document_index in range(len(self.documents)):
                 instances.extend(
-                    self.create_nsp(document_index,
-                                    max_seq_length, masked_lm_prob,
-                                    max_predictions_per_seq, vocab_words)
-                )
+                    self.create_nsp(
+                        document_index, max_seq_length, mlm_prob, max_predictions_per_seq, vocab_words))
 
         random.shuffle(instances)
         self.instances = instances
@@ -74,7 +58,8 @@ class BertData(object):
         batch = dict(zip(features, [[] for _ in features]))
         num_instances = 0
         for instance in self.instances:
-            input_ids = [self.vocab[token] if token in self.vocab else self.vocab['[UNK]'] for token in instance['tokens']]
+            input_ids = [
+                self.vocab[token] if token in self.vocab else self.vocab['[UNK]'] for token in instance['tokens']]
             input_mask = [1] * len(input_ids)
             segment_ids = instance['segment_ids']
             while len(input_ids) < self.max_seq_length:
@@ -83,7 +68,8 @@ class BertData(object):
                 segment_ids.append(0)
 
             mlm_positions = instance['mlm_positions']
-            mlm_ids = [self.vocab[label] if label in self.vocab else self.vocab['[UNK]'] for label in instance['mlm_labels']]
+            mlm_ids = [
+                self.vocab[label] if label in self.vocab else self.vocab['[UNK]'] for label in instance['mlm_labels']]
             mlm_weights = [1.0] * len(mlm_ids)
             while len(mlm_positions) < self.max_predictions_per_seq:
                 mlm_positions.append(0)
@@ -109,7 +95,7 @@ class BertData(object):
         return self.iterator
 
     def create_nsp(self, document_index,
-                   max_seq_length, masked_lm_prob,
+                   max_seq_length, mlm_prob,
                    max_predictions_per_seq, vocab_words):
         document = self.documents[document_index]
         # [CLS], [SEP], [SEP]
@@ -181,7 +167,7 @@ class BertData(object):
                     segment_ids.append(1)
 
                     tokens, mlm_positions, mlm_labels = self.create_mlm(
-                        tokens, masked_lm_prob, max_predictions_per_seq, vocab_words)
+                        tokens, mlm_prob, max_predictions_per_seq, vocab_words)
                     instance = {
                         'tokens': tokens,
                         'segment_ids': segment_ids,
@@ -197,29 +183,34 @@ class BertData(object):
         return instances
 
     @staticmethod
-    def create_mlm(tokens, masked_lm_prob, max_predictions_per_seq, vocab_words):
+    def create_mlm(tokens, mlm_prob, max_predictions_per_seq, vocab_words):
         candidates = []
         for i in range(len(tokens)):
             if tokens[i] == '[CLS]' or tokens[i] == '[SEP]':
                 continue
-            candidates.append(i)
+            if len(candidates) >= 1 and tokens[i].startswith("##"):
+                candidates[-1].append(i)
+            candidates.append([i])
         random.shuffle(candidates)
 
         output_tokens = list(tokens)
-        num_to_predict = min(max_predictions_per_seq, max(1, int(round(len(tokens) * masked_lm_prob))))
+        num_to_predict = min(max_predictions_per_seq, max(1, int(round(len(tokens) * mlm_prob))))
         mlms = []
-        for index in candidates:
+        for candidate in candidates:
             if len(mlms) >= num_to_predict:
                 break
-            if random.random() < 0.8:
-                masked_token = '[MASK]'
-            else:
-                if random.random() < 0.5:
-                    masked_token = masked_token = tokens[index]
+            if len(mlms) + len(candidate) > num_to_predict:
+                continue
+            for index in candidate:
+                if random.random() < 0.8:
+                    masked_token = '[MASK]'
                 else:
-                    masked_token = vocab_words[random.randint(0, len(vocab_words) - 1)]
-            output_tokens[index] = masked_token
-            mlms.append([index, tokens[index]])
+                    if random.random() < 0.5:
+                        masked_token = masked_token = tokens[index]
+                    else:
+                        masked_token = vocab_words[random.randint(0, len(vocab_words) - 1)]
+                output_tokens[index] = masked_token
+                mlms.append([index, tokens[index]])
         mlms = sorted(mlms, key=lambda x: x[0])
 
         mlm_positions = []

@@ -33,10 +33,10 @@ class MaskedLanguageModel(nn.Module):
 
 
 class NextSentencePrediction(nn.Module):
-    def __init__(self, hid_size):
+    def __init__(self, hidden_size):
         super(NextSentencePrediction, self).__init__()
 
-        self.fc = nn.Linear(hid_size, 2)
+        self.fc = nn.Linear(hidden_size, 2)
 
     def forward(self, x):
         return torch.softmax(self.fc(x[:, 0, :]), dim=-1)
