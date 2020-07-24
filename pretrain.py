@@ -4,12 +4,12 @@ from model import Bert
 
 
 class BertPreTrain(nn.Module):
-    def __init__(self, bert_config):
+    def __init__(self, bert_model):
         super(BertPreTrain, self).__init__()
 
-        self.bert = Bert(bert_config)
-        self.mlm = MaskedLanguageModel(bert_config.vocab_size, bert_config.hidden_size)
-        self.nsp = NextSentencePrediction(bert_config.hidden_size)
+        self.bert = bert_model
+        self.mlm = MaskedLanguageModel(bert_model.config.vocab_size, bert_model.config.hidden_size)
+        self.nsp = NextSentencePrediction(bert_model.config.hidden_size)
 
     def forward(self, x, segment_ids, mlm_positions):
         x = self.bert(x, segment_ids)
@@ -29,7 +29,8 @@ class MaskedLanguageModel(nn.Module):
     def forward(self, x, mlm_positions):
         batch_size = mlm_positions.shape[0]
         return torch.tensor(
-            [torch.softmax(self.fc(x), dim=-1).detach().numpy()[i, mlm_positions[i, :], :] for i in range(batch_size)])
+            [torch.log_softmax(
+                self.fc(x), dim=-1).detach().numpy()[i, mlm_positions[i, :], :] for i in range(batch_size)])
 
 
 class NextSentencePrediction(nn.Module):
@@ -39,4 +40,4 @@ class NextSentencePrediction(nn.Module):
         self.fc = nn.Linear(hidden_size, 2)
 
     def forward(self, x):
-        return torch.softmax(self.fc(x[:, 0, :]), dim=-1)
+        return torch.log_softmax(self.fc(x[:, 0, :]), dim=-1)

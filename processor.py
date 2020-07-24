@@ -76,7 +76,7 @@ class BertData(object):
                 mlm_ids.append(0)
                 mlm_weights.append(0.0)
 
-            nsp_labels = int(instance['is_next'])
+            nsp_labels = 0 if instance['is_next'] else 1
 
             batch['input_ids'].append(input_ids)
             batch['input_mask'].append(input_mask)

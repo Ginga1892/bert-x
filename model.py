@@ -43,6 +43,7 @@ class BertConfig(object):
 class Bert(nn.Module):
     def __init__(self, config):
         super(Bert, self).__init__()
+        self.config = config
 
         self.tok_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
         self.pos_embedding = nn.Embedding(config.max_seq_length, config.hidden_size)
@@ -52,6 +53,7 @@ class Bert(nn.Module):
                 config.hidden_size,
                 config.num_attention_heads,
                 config.intermediate_size,
+                config.hidden_act,
                 config.hidden_dropout_prob,
                 config.attention_dropout_prob) for _ in range(config.num_hidden_layers)
         ])
@@ -79,13 +81,15 @@ class Encoder(nn.Module):
                  hidden_size,
                  num_attention_heads,
                  intermediate_size,
+                 hidden_act,
                  hidden_dropout_prob,
                  attention_dropout_prob):
         super(Encoder, self).__init__()
 
         self.self_attention = MultiHeadAttention(hidden_size, num_attention_heads, attention_dropout_prob)
+        self.activation = nn.GELU() if hidden_act == 'gelu' else nn.Tanh()
         self.ffn = nn.Sequential(nn.Linear(hidden_size, intermediate_size),
-                                 nn.GELU(),
+                                 self.activation,
                                  nn.Linear(intermediate_size,hidden_size))
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(hidden_dropout_prob)
@@ -124,8 +128,8 @@ class MultiHeadAttention(nn.Module):
         k = self.w_k(key)
         v = self.w_v(value)
 
-        # q, v = [batch_size, src_len, n_heads, head_size]
-        # k = [batch_size, src_len, head_size, n_heads]
+        # q, v = [batch_size, src_len, num_attention_heads, head_size]
+        # k = [batch_size, src_len, head_size, num_attention_heads]
         q = q.view(batch_size, -1, self.h, self.d_k).permute(0, 2, 1, 3)
         k = k.view(batch_size, -1, self.h, self.d_k).permute(0, 2, 3, 1)
         v = v.view(batch_size, -1, self.h, self.d_k).permute(0, 2, 1, 3)
