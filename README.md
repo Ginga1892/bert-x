@@ -1,6 +1,6 @@
 # BERT - X
 
-A flexible BERT-type model in PyTorch. Here you can try types of models (BERT, ALBERT, SpanBERT, etc.) in easy mode.
+An unified model of BERTs in PyTorch. Here you can try multiple models (BERT, ALBERT, SpanBERT, etc.) in easy mode.
 
 
 
