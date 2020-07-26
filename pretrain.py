@@ -35,8 +35,10 @@ class MaskedLanguageModel(nn.Module):
 class NextSentencePrediction(nn.Module):
     def __init__(self, hidden_size):
         super(NextSentencePrediction, self).__init__()
-
+        self.pooler = nn.Sequential(nn.Linear(hidden_size, hidden_size),
+                                    nn.Tanh())
         self.fc = nn.Linear(hidden_size, 2)
 
     def forward(self, x):
-        return torch.log_softmax(self.fc(x[:, 0, :]), dim=-1)
+        pooler_output = self.pooler(x[:, 0, :])
+        return torch.log_softmax(self.fc(pooler_output), dim=-1)
