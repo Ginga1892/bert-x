@@ -26,7 +26,7 @@ bert_config = BertConfig.from_json('bert_config.json')
 model = Bert(bert_config)
 
 # Define the trainer for the model
-trainer = Trainer(model, bert_data)
+trainer = Trainer(model)
 # Run pre-training
 trainer.pre_train(iterator=train_iterator,
                   do_train=True,
