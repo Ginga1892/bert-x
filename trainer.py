@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
-from pretrain import BertPreTrain, BertClassification
-import tokenization
-from processor import PreTrainData
-from model import BertConfig, Bert
+from pretrain import BertPreTrain
+from finetune import BertClassification
 
 
 class Trainer(object):

@@ -1,6 +1,10 @@
 import torch
 import random
 import csv
+from bert import BertConfig, Bert
+from albert import AlbertConfig, Albert
+import tokenization
+from trainer import Trainer
 
 
 class PreTrainData(object):
@@ -23,7 +27,8 @@ class PreTrainData(object):
         random.shuffle(self.documents)
 
     def create_instances(self, max_seq_length, dupe_factor,
-                         mlm_prob, max_predictions_per_seq):
+                         mlm_prob, max_predictions_per_seq,
+                         use_sop=False):
         self.max_seq_length = max_seq_length
         self.max_predictions_per_seq = max_predictions_per_seq
 
@@ -33,7 +38,8 @@ class PreTrainData(object):
             for document_index in range(len(self.documents)):
                 self.instances.extend(
                     self.create_nsp(
-                        document_index, max_seq_length, mlm_prob, max_predictions_per_seq, vocab_words))
+                        document_index, max_seq_length, mlm_prob,
+                        max_predictions_per_seq, vocab_words, use_sop))
 
         random.shuffle(self.instances)
         return self.instances
@@ -51,7 +57,7 @@ class PreTrainData(object):
             'mlm_positions',
             'mlm_ids',
             'mlm_weights',
-            'nsp_labels'
+            'nsp_label'
         ]
 
         self.iterator = []
@@ -93,9 +99,8 @@ class PreTrainData(object):
 
         return self.iterator
 
-    def create_nsp(self, document_index,
-                   max_seq_length, mlm_prob,
-                   max_predictions_per_seq, vocab_words):
+    def create_nsp(self, document_index, max_seq_length, mlm_prob,
+                   max_predictions_per_seq, vocab_words, use_sop):
         document = self.documents[document_index]
         # [CLS], [SEP], [SEP]
         max_num_tokens = max_seq_length - 3
@@ -119,22 +124,28 @@ class PreTrainData(object):
 
                     tokens_b = []
                     target_b_length = target_seq_length - len(tokens_a)
-                    # random sentence
+                    # Random sentence
                     if len(current_chunk) == 1 or random.random() < 0.5:
                         is_next = False
-                        # random document
-                        random_document_index = random.randint(0, len(self.documents) - 1)
-                        while random_document_index == document_index:
+                        if use_sop:
+                            for j in range(a_end, len(current_chunk)):
+                                tokens_b.extend(current_chunk[j])
+                            # Swap
+                            tokens_a, tokens_b = tokens_b, tokens_a
+                        else:
+                            # Random document
                             random_document_index = random.randint(0, len(self.documents) - 1)
-                        random_document = self.documents[random_document_index]
-                        random_start = random.randint(0, len(random_document) - 1)
-                        for j in range(random_start, len(random_document)):
-                            tokens_b.extend(random_document[j])
-                            if len(tokens_b) >= target_b_length:
-                                break
-                        num_unused_segments = len(current_chunk) - a_end
-                        i -= num_unused_segments
-                    # next sentence
+                            while random_document_index == document_index:
+                                random_document_index = random.randint(0, len(self.documents) - 1)
+                            random_document = self.documents[random_document_index]
+                            random_start = random.randint(0, len(random_document) - 1)
+                            for j in range(random_start, len(random_document)):
+                                tokens_b.extend(random_document[j])
+                                if len(tokens_b) >= target_b_length:
+                                    break
+                            num_unused_segments = len(current_chunk) - a_end
+                            i -= num_unused_segments
+                    # Next sentence
                     else:
                         is_next = True
                         for j in range(a_end, len(current_chunk)):
