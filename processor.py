@@ -23,33 +23,7 @@ class PreTrainData(object):
         random.shuffle(self.documents)
 
         self.instances = None
-        self.iterator = None
-
-    def create_instances(self, max_seq_length, dupe_factor,
-                         mlm_prob, max_predictions_per_seq,
-                         method='nsp'):
-        self.max_seq_length = max_seq_length
-        self.max_predictions_per_seq = max_predictions_per_seq
-
-        vocab_words = list(self.vocab.keys())
-        self.instances = []
-        if method == 'nsp':
-            for _ in range(dupe_factor):
-                for document_index in range(len(self.documents)):
-                    self.instances.extend(
-                        self.create_nsp(
-                            document_index, max_seq_length, mlm_prob,
-                            max_predictions_per_seq, vocab_words))
-        else:
-            for _ in range(dupe_factor):
-                for document_index in range(len(self.documents)):
-                    self.instances.extend(
-                        self.create_sop(
-                            document_index, max_seq_length, mlm_prob,
-                            max_predictions_per_seq, vocab_words))
-
-        random.shuffle(self.instances)
-        return self.instances
+        # for _ in range(dupe_factor):
 
     def get_iterator(self, config):
         def to_tensor(list_data):
@@ -57,20 +31,19 @@ class PreTrainData(object):
                 list_data[key] = torch.LongTensor(value)
             return list_data
 
-        features = [
-            'input_ids',
-            'input_mask',
-            'segment_ids',
-            'mlm_positions',
-            'mlm_ids',
-            'mlm_weights',
-            'nsp_label'
-        ]
+        features = ['input_ids', 'input_mask', 'segment_ids']
+        if 'mlm_positions' in self.instances[0]:
+            features.extend(['mlm_positions', 'mlm_ids', 'mlm_weights'])
+        if 'is_next' in self.instances[0]:
+            features.append('nsp_label')
+        if 'sbo_boundaries' in self.instances[0]:
+            features.extend(['sbo_boundaries', 'sbo_ids'])
 
-        self.iterator = []
+        iterator = []
         batch = dict(zip(features, [[] for _ in features]))
         num_instances = 0
         for instance in self.instances:
+            # There has to be input_ids, input_mask and segment_ids
             input_ids = [
                 self.vocab[token] if token in self.vocab else self.vocab['[UNK]'] for token in instance['tokens']]
             input_mask = [1] * len(input_ids)
@@ -79,34 +52,39 @@ class PreTrainData(object):
                 input_ids.append(0)
                 input_mask.append(0)
                 segment_ids.append(0)
-
-            mlm_positions = instance['mlm_positions']
-            mlm_ids = [
-                self.vocab[label] if label in self.vocab else self.vocab['[UNK]'] for label in instance['mlm_labels']]
-            mlm_weights = [1.0] * len(mlm_ids)
-            while len(mlm_positions) < config.max_predictions_per_seq:
-                mlm_positions.append(0)
-                mlm_ids.append(0)
-                mlm_weights.append(0.0)
-
-            nsp_label = 0 if instance['is_next'] else 1
-
             batch['input_ids'].append(input_ids)
             batch['input_mask'].append(input_mask)
             batch['segment_ids'].append(segment_ids)
-            batch['mlm_positions'].append(mlm_positions)
-            batch['mlm_ids'].append(mlm_ids)
-            batch['mlm_weights'].append(mlm_weights)
-            batch['nsp_label'].append(nsp_label)
+
+            # For masked language model, there has to be mlm_positions,
+            # mlm_labels and mlm_weights
+            if 'mlm_positions' in features:
+                mlm_positions = instance['mlm_positions']
+                mlm_ids = [
+                    self.vocab[label] if label in self.vocab else self.vocab['[UNK]'] for label in instance['mlm_labels']]
+                mlm_weights = [1.0] * len(mlm_ids)
+                while len(mlm_positions) < config.max_predictions_per_seq:
+                    mlm_positions.append(0)
+                    mlm_ids.append(0)
+                    mlm_weights.append(0.0)
+                batch['mlm_positions'].append(mlm_positions)
+                batch['mlm_ids'].append(mlm_ids)
+                batch['mlm_weights'].append(mlm_weights)
+
+            # For sentence prediction tasks
+            if 'is_next' in features:
+                nsp_label = 0 if instance['is_next'] else 1
+                batch['nsp_label'].append(nsp_label)
 
             num_instances = (num_instances + 1) % config.batch_size
             if num_instances == 0:
-                self.iterator.append(to_tensor(batch))
+                iterator.append(to_tensor(batch))
                 batch = dict(zip(features, [[] for _ in features]))
 
-        return self.iterator
+        return iterator
 
     def create_nsp(self, config):
+        print('***** Creating instances for next sentence prediction *****')
         sp_instances = []
         for document in self.documents:
             # [CLS], [SEP], [SEP]
@@ -217,6 +195,8 @@ class PreTrainData(object):
                         target_b_length = target_seq_length - len(tokens_a)
                         # Random sentence
                         if len(current_chunk) == 1 or random.random() < 0.5:
+                            if len(current_chunk) == 1:
+                                break
                             is_next = False
                             for j in range(a_end, len(current_chunk)):
                                 tokens_b.extend(current_chunk[j])
@@ -269,6 +249,7 @@ class PreTrainData(object):
         self.instances = sp_instances
 
     def create_mlm(self, config):
+        print('***** Creating instances for masked language model *****')
         vocab_words = list(self.vocab.keys())
         mlm_instances = []
         for instance in self.instances:
@@ -313,8 +294,8 @@ class PreTrainData(object):
                 mlm_labels.append(mlm[1])
 
             instance['tokens'] = output_tokens
-            instance['mlm_positions']: mlm_positions
-            instance['mlm_labels']: mlm_labels
+            instance['mlm_positions'] = mlm_positions
+            instance['mlm_labels'] = mlm_labels
             mlm_instances.append(instance)
 
         self.instances = mlm_instances
