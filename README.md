@@ -2,9 +2,17 @@
 
 An unified model of BERTs in PyTorch. Here you can try multiple models (BERT, ALBERT, SpanBERT, etc.) in easy mode.
 
+## Supported Models
 
+* BERT
+* ALBERT
+* SpanBERT
 
-## Usage
+## Flexibility
+
+We encourage you to create your own BERT model based on flexible pretrain models (PTMs).
+
+## Easy-Usage
 
 * Original BERT
 
