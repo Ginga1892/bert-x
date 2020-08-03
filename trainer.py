@@ -29,12 +29,10 @@ class Trainer(object):
                     mlm_weights = batch['mlm_weights']
                     nsp_label = batch['nsp_label']
 
-                    prediction_scores, next_sentence_scores = model(input_ids, input_mask, segment_ids, mlm_positions)
+                    mlm_output, nsp_output = model(input_ids, input_mask, segment_ids, mlm_positions)
 
-                    mlm_mask = mlm_weights.unsqueeze(2).repeat(1, 1, self.bert_model.config.vocab_size)
-                    mlm_loss = criterion(prediction_scores.masked_fill(mlm_mask == 0, 0).permute(0, 2, 1), mlm_ids)
-
-                    nsp_loss = criterion(next_sentence_scores, nsp_label)
+                    mlm_loss = get_mlm_loss(mlm_output, mlm_ids, mlm_weights)
+                    nsp_loss = get_nsp_loss(nsp_output, nsp_label)
 
                     total_loss = mlm_loss + nsp_loss
                     epoch_loss += total_loss
@@ -72,3 +70,19 @@ class Trainer(object):
                     optimizer.step()
 
                 print('Epoch {}: loss = {}'.format(e + 1, epoch_loss))
+
+
+def get_mlm_loss(mlm_output, mlm_ids, mlm_weights):
+    mlm_ids, mlm_weights = mlm_ids.view(-1), mlm_weights.view(-1, 1)
+    criterion = nn.CrossEntropyLoss()
+    loss = criterion(mlm_output.masked_fill(mlm_weights == 0, 0), mlm_ids)
+
+    return loss
+
+
+def get_nsp_loss(nsp_output, nsp_label):
+    nsp_label = nsp_label.view(-1)
+    criterion = nn.CrossEntropyLoss()
+    loss = criterion(nsp_output, nsp_label)
+
+    return loss
